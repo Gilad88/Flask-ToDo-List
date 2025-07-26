@@ -1,0 +1,110 @@
+/* static/css/style.css */
+
+/* כללי */
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #f8f9fa;
+  color: #343a40;
+  line-height: 1.6;
+}
+
+.container {
+  padding-top: 20px;
+  padding-bottom: 20px;
+}
+
+h1 {
+  color: #007bff;
+  margin-bottom: 30px;
+}
+
+/* טופס הוספת משימה */
+.input-group .form-control {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.input-group .btn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* רשימת המשימות */
+.list-group-item {
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  padding: 1rem 0;
+}
+.list-group-item:first-child {
+  border-top: none;
+}
+.list-group-item:last-child {
+  border-bottom: 1px solid rgba(0,0,0,.125); /* Ensure bottom border for last item */
+}
+
+/* תוכן המשימה */
+.task-content-label {
+  cursor: pointer;
+  display: flex; /* לתיבה ולטקסט להיות באותה שורה */
+  align-items: center;
+}
+
+.task-text {
+  font-size: 1.1rem;
+  word-break: break-word; /* לשבור מילים ארוכות */
+}
+
+.task-date {
+  font-size: 0.8rem;
+  color: #6c757d;
+}
+
+/* משימה שבוצעה */
+.completed .task-text {
+  text-decoration: line-through;
+  color: #999;
+}
+
+/* תיבת סימון */
+.form-check-input {
+  min-width: 1.25em; /* גודל מינימלי עבור תיבת הסימון */
+  min-height: 1.25em;
+  margin-top: 0.25rem; /* יישור אנכי */
+}
+.form-check-input:checked {
+  background-color: #007bff;
+  border-color: #007bff;
+}
+
+/* כפתורי פעולות */
+.task-actions .btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border-radius: 0.25rem;
+}
+.task-actions .btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  border-radius: 0.2rem;
+}
+
+/* פוטר */
+.footer {
+  padding-top: 15px;
+  font-size: 0.9rem;
+  color: #6c757d;
+}
+.footer a {
+  text-decoration: none;
+  color: #007bff;
+}
+.footer a:hover {
+  text-decoration: underline;
+}
+
+/* כללי למודל */
+.modal-title {
+  color: #343a40;
+}
