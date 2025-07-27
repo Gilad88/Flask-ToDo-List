@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Update Task</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Update Task</h1>
+        <form action="/update/{{ task.id }}" method="POST">
+            <label for="content">Task Content:</label>
+            <input type="text" name="content" id="content" value="{{ task.content }}" required>
+            <br>
+            <input type="checkbox" name="done" id="done" value="true" {% if task.done %}checked{% endif %}>
+            <label for="done">Completed</label>
+            <br>
+            <input type="submit" value="Update Task">
+        </form>
+        <p><a href="{{ url_for('index') }}">Back to Todo List</a></p>
+    </div>
+</body>
+</html>
