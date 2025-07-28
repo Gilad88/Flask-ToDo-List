@@ -1,0 +1,101 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main # Pipeline will run on pushes to the main branch
+  pull_request:
+    branches:
+      - main # Pipeline will run on pull requests targeting the main branch
+
+jobs:
+  build-test-push:
+    runs-on: ubuntu-latest # The type of virtual machine to run the job on
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4 # Action to get your repository code
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3 # Required for building Docker images efficiently
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }} # Uses a GitHub Secret for your Docker Hub username
+        password: ${{ secrets.DOCKER_PASSWORD }} # Uses a GitHub Secret for your Docker Hub Access Token
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: . # The path to the build context (your project root)
+        file: ./Dockerfile # The path to your Dockerfile
+        push: true # Push the image to Docker Hub after building
+        tags: | # Define image tags
+          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest # A 'latest' tag
+          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }} # A unique tag based on the commit SHA
+        cache-from: type=gha # Use GitHub Actions cache for faster builds
+        cache-to: type=gha,mode=max # Cache layers for future builds
+
+    - name: Set up temporary PostgreSQL for tests (if needed)
+      # This step sets up a temporary PostgreSQL service just for the tests.
+      # It's better to keep integration tests in a real database, even if temporary.
+      run: |
+        docker run -d --name temp_db -e POSTGRES_DB=test_db -e POSTGRES_USER=test_user -e POSTGRES_PASSWORD=test_password -p 5432:5432 postgres:16-alpine
+        echo "Waiting for temporary PostgreSQL to be ready..."
+        while ! docker exec temp_db pg_isready -h localhost -p 5432 -U test_user; do
+          echo "Temporary PostgreSQL is unavailable - sleeping"
+          sleep 1
+        done
+        echo "Temporary PostgreSQL is ready!"
+
+    - name: Run tests inside application container
+      run: |
+        # Use the image we just built and pushed, or pull it if running in a separate job
+        docker pull ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}
+
+        # Run the application container. We override the entrypoint to run pytest directly.
+        # We also link it to the temporary PostgreSQL container for database tests.
+        docker run --network host --rm --name app_for_tests \
+          -e DATABASE_URL="postgresql://test_user:test_password@localhost:5432/test_db" \
+          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }} \
+          pytest
+      env:
+        # Pass necessary environment variables for tests
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+
+    - name: Send Slack Notification (Example - requires configuration)
+      # You can replace this with email or other notification methods
+      # This step will only run if the previous steps passed successfully
+      if: success()
+      uses: rtCamp/action-slack-notify@v2
+      env:
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }} # GitHub Secret for Slack webhook
+        SLACK_MESSAGE: "CI Pipeline for Flask To-Do App passed! Image ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }} pushed."
+        SLACK_USERNAME: GitHub Actions
+        SLACK_CHANNEL: '#devops-notifications' # Your Slack channel
+
+    - name: Update CD Repository (GitOps - requires configuration)
+      # This step will push a change (e.g., update image tag in a K8s manifest) to your CD repo.
+      # This will trigger ArgoCD to deploy the new version.
+      if: success()
+      run: |
+        # Configure Git
+        git config --global user.email "actions@github.com"
+        git config --global user.name "GitHub Actions"
+
+        # Checkout the CD repository
+        git clone https://github.com/Gilad88/flask-todo-infrastructure.git cd_repo_path
+        cd cd_repo_path
+
+        # For simplicity, let's just create a file indicating the new image.
+        # In a real scenario, you would edit an existing K8s manifest (e.g., deployment.yaml)
+        echo "image: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}" > new_image.yaml
+
+        # Commit and push changes
+        git add new_image.yaml # Add your modified K8s manifest file
+        git commit -m "Update Flask To-Do App image to ${{ github.sha }}"
+        git push https://x-access-token:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure.git main
+      env:
+        # This is for the `git push` command, using a GitHub Personal Access Token
+        GH_PAT_CD_REPO: ${{ secrets.GH_PAT_CD_REPO }} # GitHub Secret for PAT
