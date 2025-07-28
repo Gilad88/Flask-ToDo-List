@@ -28,14 +28,14 @@ jobs:
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
-        context: . # The path to the build context (your project root)
-        file: ./Dockerfile # The path to your Dockerfile
-        push: true # Push the image to Docker Hub after building
-        tags: | # Define image tags
-          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest # A 'latest' tag
-          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }} # A unique tag based on the commit SHA
-        cache-from: type=gha # Use GitHub Actions cache for faster builds
-        cache-to: type=gha,mode=max # Cache layers for future builds
+        context:
+        file: ./Dockerfile
+        push: true
+        tags: |
+          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest
+          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
     - name: Set up temporary PostgreSQL for tests (if needed)
       # This step sets up a temporary PostgreSQL service just for the tests.
