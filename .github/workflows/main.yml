@@ -37,17 +37,19 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Set up temporary PostgreSQL for tests (if needed)
-      # This step sets up a temporary PostgreSQL service just for the tests.
-      # It's better to keep integration tests in a real database, even if temporary.
+    - name: Run tests using Docker Compose
+      # Use Docker Compose to bring up services and run tests, similar to local setup
       run: |
-        docker run -d --name temp_db -e POSTGRES_DB=test_db -e POSTGRES_USER=test_user -e POSTGRES_PASSWORD=test_password -p 5432:5432 postgres:16-alpine
-        echo "Waiting for temporary PostgreSQL to be ready..."
-        while ! docker exec temp_db pg_isready -h localhost -p 5432 -U test_user; do
-          echo "Temporary PostgreSQL is unavailable - sleeping"
-          sleep 1
-        done
-        echo "Temporary PostgreSQL is ready!"
+        # The docker-compose.yml should be in your repository root
+        docker compose up -d db # Start the database service in detached mode
+        echo "Waiting for PostgreSQL to be ready within Docker Compose network..."
+        # Wait for the DB service to be healthy. Adjust sleep if needed.
+        timeout 60s bash -c 'while ! docker compose exec db pg_isready -U test_user -d test_db; do sleep 1; done'
+        echo "PostgreSQL is ready!"
+        docker compose exec web pytest # Run tests inside the 'web' service container
+      env:
+        # Ensure these match your docker-compose.yml and test_app.py DATABASE_URL
+        DATABASE_URL: postgresql://test_user:test_password@db:5432/test_db
 
     - name: Run tests inside application container
       run: |
