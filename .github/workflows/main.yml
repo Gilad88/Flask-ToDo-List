@@ -51,7 +51,7 @@ jobs:
 
     - name: Notify Slack (optional - configure SLACK_WEBHOOK_URL secret)
       uses: rtCamp/action-slack-notify@v2
-      if: always() # Always run this step, regardless of previous step success/failure
+      if: always()
       env:
         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }} # Changed to SLACK_WEBHOOK for consistency
         SLACK_MESSAGE: "GitHub Action Pipeline for Flask-ToDo-List completed. Status: ${{ job.status }}"
