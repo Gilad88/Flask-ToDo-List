@@ -91,7 +91,8 @@ jobs:
         git add new_image.yaml # Add your modified K8s manifest file
         git commit -m "Update Flask To-Do App image to ${{ github.sha }}"
         # *** התיקון בשורה הבאה: הסרנו את ה-`.git` אחרי השם של הרפוזיטורי של ה-CD. ***
-        git push "https://x-access-token:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure" main
+        git remote set-url origin "https://x-access-token:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure.git"
+        git push origin main
       env:
         # This is for the `git push` command, using a GitHub Personal Access Token
         GH_PAT_CD_REPO: ${{ secrets.GH_PAT_CD_REPO }} # GitHub Secret for PAT
