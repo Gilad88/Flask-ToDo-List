@@ -33,6 +33,13 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
+    - name: Install Docker Compose # <--- שלב חדש נוסף כאן!
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker-compose-plugin # התקנת docker-compose כפלאגין
+        # וודא שהפקודה docker-compose קיימת
+        docker compose version
+
     - name: Ensure docker-compose.yml is in the repository root
       run: |
         if [ ! -f "docker-compose.yml" ]; then
@@ -42,16 +49,17 @@ jobs:
 
     - name: Run tests using Docker Compose
       run: |
-        docker-compose down --volumes --remove-orphans || true
-        docker-compose up -d --build --force-recreate
+        # שימוש בפורמט החדש של docker compose (ללא מקף)
+        docker compose down --volumes --remove-orphans || true
+        docker compose up -d --build --force-recreate
         sleep 10 # Give services time to start
-        docker-compose exec -T app pytest
-        docker-compose down --volumes --remove-orphans
+        docker compose exec -T app pytest
+        docker compose down --volumes --remove-orphans
       working-directory: . # Ensure this runs from the root where docker-compose.yml is located
 
     - name: Notify Slack (optional - configure SLACK_WEBHOOK_URL secret)
       uses: rtCamp/action-slack-notify@v2
-      if: always()
+      if: always() # Always run this step, regardless of previous step success/failure
       env:
         SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }} # Changed to SLACK_WEBHOOK for consistency
         SLACK_MESSAGE: "GitHub Action Pipeline for Flask-ToDo-List completed. Status: ${{ job.status }}"
