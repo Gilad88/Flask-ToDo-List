@@ -3,83 +3,70 @@ name: CI Pipeline
 on:
   push:
     branches:
-      - main # Pipeline will run on pushes to the main branch
-  pull_request:
-    branches:
-      - main # Pipeline will run on pull requests targeting the main branch
+      - main
 
 jobs:
-  build-test-push:
+  build_and_test:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4 # Action to get your repository code
-      with:
-        fetch-depth: 0 # IMPORTANT: This ensures a full clone, making all commit SHAs available
+      uses: actions/checkout@v4
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3 # Required for building Docker images efficiently
+      uses: docker/setup-buildx-action@v3
 
     - name: Login to Docker Hub
       uses: docker/login-action@v3
       with:
-        username: ${{ secrets.DOCKER_USERNAME }} # Uses a GitHub Secret for your Docker Hub username
-        password: ${{ secrets.DOCKER_PASSWORD }} # Uses a GitHub Secret for your Docker Hub Access Token
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_PASSWORD }}
 
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
-        context: . # The path to the build context (your project root)
-        file: ./Dockerfile # The path to your Dockerfile
-        push: true # Push the image to Docker Hub after building
-        tags: | # Define image tags
+        context: .
+        file: ./Dockerfile
+        push: true
+        tags: |
           ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest
           ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}
-        cache-from: type=gha # Use GitHub Actions cache for faster builds
-        cache-to: type=gha,mode=max # Cache layers for future builds
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Ensure docker-compose.yml is in the repository root
+      run: |
+        if [ ! -f "docker-compose.yml" ]; then
+          echo "Error: docker-compose.yml not found in the repository root."
+          exit 1
+        fi
 
     - name: Run tests using Docker Compose
-      # Use Docker Compose to bring up all services needed for tests (db and web)
       run: |
-        # Ensure the docker-compose.yml is in the repository root
-        # Use 'up --build' to ensure the 'web' service builds from source if needed
-        # and '--abort-on-container-exit' to stop all services if tests fail
-        docker compose up --build -d # Start both db and web services in detached mode
+        docker-compose down --volumes --remove-orphans || true
+        docker-compose up -d --build --force-recreate
+        sleep 10 # Give services time to start
+        docker-compose exec -T app pytest
+        docker-compose down --volumes --remove-orphans
+      working-directory: . # Ensure this runs from the root where docker-compose.yml is located
 
-        echo "Waiting for PostgreSQL to be ready within Docker Compose network..."
-        # Wait for the DB service to be healthy. Adjust sleep if needed.
-        timeout 60s bash -c 'while ! docker compose exec db pg_isready -U test_user -d test_db; do sleep 1; done'
-        echo "PostgreSQL is ready!"
-
-        echo "Running tests inside the 'web' service container..."
-        docker compose exec web pytest # Execute pytest inside the running 'web' service
-      env:
-        # Ensure these match your docker-compose.yml and test_app.py DATABASE_URL
-        DATABASE_URL: postgresql://test_user:test_password@db:5432/test_db
-
-    - name: Send Slack Notification (Example - requires configuration)
-      # You can replace this with email or other notification methods
-      # This step will only run if the previous steps passed successfully
-      if: success()
+    - name: Notify Slack (optional - configure SLACK_WEBHOOK_URL secret)
       uses: rtCamp/action-slack-notify@v2
+      if: always() # Always run this step, regardless of previous step success/failure
       env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }} # GitHub Secret for Slack webhook
-        SLACK_MESSAGE: "CI Pipeline for Flask To-Do App passed! Image ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }} pushed."
-        SLACK_USERNAME: GitHub Actions
-        SLACK_CHANNEL: '#devops-notifications' # Your Slack channel
-
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }} # Changed to SLACK_WEBHOOK for consistency
+        SLACK_MESSAGE: "GitHub Action Pipeline for Flask-ToDo-List completed. Status: ${{ job.status }}"
+        SLACK_USERNAME: "GitHub Actions Bot"
+        SLACK_CHANNEL: "#general" # Or your preferred channel
 
     - name: Update CD Repository (GitOps - requires configuration)
-      # This step will push a change (e.g., update image tag in a K8s manifest) to your CD repo.
-      # This will trigger ArgoCD to deploy the new version.
-      if: success()
+      if: success() # Only run this if all previous steps succeeded
       run: |
         # Configure Git
         git config --global user.email "actions@github.com"
         git config --global user.name "GitHub Actions"
 
-        # Checkout the CD repository
+        # Clone the CD repository (e.g., where your K8s manifests are)
+        # Replace 'Gilad88/flask-todo-infrastructure.git' with your actual CD repository path
         git clone https://github.com/Gilad88/flask-todo-infrastructure.git cd_repo_path
         cd cd_repo_path
 
@@ -90,8 +77,9 @@ jobs:
         # Commit and push changes
         git add new_image.yaml # Add your modified K8s manifest file
         git commit -m "Update Flask To-Do App image to ${{ github.sha }}"
-        # *** התיקון בשורה הבאה: הסרנו את ה-`.git` אחרי השם של הרפוזיטורי של ה-CD. ***
+        # Set the remote URL with the PAT for authentication
         git remote set-url origin "https://x-access-token:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure.git"
+        # Push changes to the 'main' branch of the CD repository
         git push origin main
       env:
         # This is for the `git push` command, using a GitHub Personal Access Token
