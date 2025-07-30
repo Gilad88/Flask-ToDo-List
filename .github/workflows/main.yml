@@ -33,12 +33,14 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
 
-    - name: Install Docker Compose # <--- שלב חדש נוסף כאן!
+    - name: Install Docker Compose # <--- שינוי גדול בשלב זה!
       run: |
-        sudo apt-get update
-        sudo apt-get install -y docker-compose-plugin # התקנת docker-compose כפלאגין
-        # וודא שהפקודה docker-compose קיימת
-        docker compose version
+        DOCKER_COMPOSE_VERSION="v2.24.5" # אתה יכול לשנות גרסה אם צריך
+        sudo curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+        sudo chmod +x /usr/local/bin/docker-compose
+        # וודא שהפקודה זמינה ב-PATH
+        docker-compose version # שימוש בפורמט הישן לבינארי שהורדנו
+        echo "Successfully installed docker-compose version ${DOCKER_COMPOSE_VERSION}"
 
     - name: Ensure docker-compose.yml is in the repository root
       run: |
@@ -49,22 +51,22 @@ jobs:
 
     - name: Run tests using Docker Compose
       run: |
-        # שימוש בפורמט החדש של docker compose (ללא מקף)
-        docker compose down --volumes --remove-orphans || true
-        docker compose up -d --build --force-recreate
+        # חזרנו לשימוש בפורמט הישן (עם מקף) של docker-compose, כי התקנו אותו כך
+        docker-compose down --volumes --remove-orphans || true
+        docker-compose up -d --build --force-recreate
         sleep 10 # Give services time to start
-        docker compose exec -T app pytest
-        docker compose down --volumes --remove-orphans
+        docker-compose exec -T app pytest
+        docker-compose down --volumes --remove-orphans
       working-directory: . # Ensure this runs from the root where docker-compose.yml is located
 
     - name: Notify Slack (optional - configure SLACK_WEBHOOK_URL secret)
       uses: rtCamp/action-slack-notify@v2
       if: always() # Always run this step, regardless of previous step success/failure
       env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }} # Changed to SLACK_WEBHOOK for consistency
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
         SLACK_MESSAGE: "GitHub Action Pipeline for Flask-ToDo-List completed. Status: ${{ job.status }}"
         SLACK_USERNAME: "GitHub Actions Bot"
-        SLACK_CHANNEL: "#general" # Or your preferred channel
+        SLACK_CHANNEL: "#general"
 
     - name: Update CD Repository (GitOps - requires configuration)
       if: success() # Only run this if all previous steps succeeded
