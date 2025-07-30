@@ -15,6 +15,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4 # Action to get your repository code
+      with:
+        fetch-depth: 0 # IMPORTANT: This ensures a full clone, making all commit SHAs available
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3 # Required for building Docker images efficiently
@@ -28,14 +30,14 @@ jobs:
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
       with:
-        context:
-        file: ./Dockerfile
-        push: true
-        tags: |
+        context: . # The path to the build context (your project root)
+        file: ./Dockerfile # The path to your Dockerfile
+        push: true # Push the image to Docker Hub after building
+        tags: | # Define image tags
           ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest
           ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        cache-from: type=gha # Use GitHub Actions cache for faster builds
+        cache-to: type=gha,mode=max # Cache layers for future builds
 
     - name: Run tests using Docker Compose
       # Use Docker Compose to bring up all services needed for tests (db and web)
@@ -55,21 +57,6 @@ jobs:
       env:
         # Ensure these match your docker-compose.yml and test_app.py DATABASE_URL
         DATABASE_URL: postgresql://test_user:test_password@db:5432/test_db
-
-    - name: Run tests inside application container
-      run: |
-        # Use the image we just built and pushed, or pull it if running in a separate job
-        docker pull ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}
-
-        # Run the application container. We override the entrypoint to run pytest directly.
-        # We also link it to the temporary PostgreSQL container for database tests.
-        docker run --network host --rm --name app_for_tests \
-          -e DATABASE_URL="postgresql://test_user:test_password@localhost:5432/test_db" \
-          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }} \
-          pytest
-      env:
-        # Pass necessary environment variables for tests
-        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
 
     - name: Send Slack Notification (Example - requires configuration)
       # You can replace this with email or other notification methods
