@@ -1,7 +1,8 @@
 #!/bin/sh
 
 echo "Waiting for PostgreSQL to be ready..."
-while ! pg_isready -h db -p 5432 -U postgres; do
+# שינוי 'db' ל-'flask-todo-db-service' כדי להתאים לשם השירות ב-Kubernetes
+while ! pg_isready -h flask-todo-db-service -p 5432 -U postgres; do
   echo "PostgreSQL is unavailable - sleeping"
   sleep 1
 done
