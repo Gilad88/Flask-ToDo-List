@@ -50,8 +50,10 @@ jobs:
           git config --global user.name "GitHub Actions"
           git clone https://Gilad88:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure.git cd_repo_path
           cd cd_repo_path
-          # שנה את שם האימג' בקובץ ה-deployment.yaml
-          sed -i "s|image: .*/flask-todo-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}|" kubernetes/deployment.yaml
+          # בדיקה האם sed זמין (לדיבוג)
+          which sed
+          # פקודת sed מתוקנת: מחפשת את השורה המלאה ומחליפה את התגית
+          sed -i "s|image: gilad88/flask-todo-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}|" kubernetes/deployment.yaml
           git add kubernetes/deployment.yaml
           git commit -m "Update Flask To-Do App image to ${{ github.sha }}" || echo "No changes to commit"
           git push origin main
