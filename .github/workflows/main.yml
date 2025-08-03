@@ -4,13 +4,13 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  workflow_dispatch: # מאפשר הפעלה ידנית של הפייפליין מ-GitHub UI
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout application code
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
@@ -21,44 +21,57 @@ jobs:
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Install Docker Compose # שלב חדש שנוסף
+
+      - name: Install Docker Compose # התקנת Docker Compose על ה-runner
         run: |
           sudo apt-get update
           sudo apt-get install -y docker-compose
 
       - name: Build and Push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v5 # פעולה מתוקנת לבנייה ודחיפה
         with:
           context: .
           file: ./Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }},${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest
 
-      - name: Run Docker Compose
+      - name: Run Docker Compose services
         run: docker-compose up --build -d
 
-      - name: Wait for services
+      - name: Wait for services to be ready
         run: |
-          sleep 10
+          sleep 10 # נותן זמן לשירותים לעלות
 
       - name: Run Tests
-        run: docker-compose exec -T web pytest
+        run: docker-compose exec -T web pytest # מריץ את הבדיקות בתוך קונטיינר ה-web
+
       - name: Stop Docker Compose services
-        if: always()
+        if: always() # ודא ששירותי Docker Compose יורדים גם אם שלבים קודמים נכשלים
         run: docker-compose down
 
-      - name: Update CD Repository (GitOps)
+      - name: Checkout CD Repository # שכפול רפוזיטורי התשתיות באמצעות actions/checkout
+        uses: actions/checkout@v4
+        with:
+          repository: Gilad88/flask-todo-infrastructure # שם הרפוזיטורי של התשתיות
+          token: ${{ secrets.GH_PAT_CD_REPO }} # ה-PAT שלך עם הרשאות גישה
+          path: cd_repo_path # התיקייה אליה נשכפל את הרפוזיטורי
+
+      - name: Update image tag in CD repo and push
         run: |
+          cd cd_repo_path
+          # הגדרות Git עבור הקומיט וה-push לרפוזיטורי התשתיות
           git config --global user.email "actions@github.com"
           git config --global user.name "GitHub Actions"
-          git clone https://Gilad88:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure.git cd_repo_path
-          cd cd_repo_path
+
           # בדיקה האם sed זמין (לדיבוג)
           which sed
+
           # פקודת sed מתוקנת: מחפשת את השורה המלאה ומחליפה את התגית
           sed -i "s|image: gilad88/flask-todo-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}|" kubernetes/deployment.yaml
+
+          # בצע commit רק אם היו שינויים בקובץ
           git add kubernetes/deployment.yaml
           git commit -m "Update Flask To-Do App image to ${{ github.sha }}" || echo "No changes to commit"
+
+          # דחוף את השינויים לענף ה-main של רפוזיטורי התשתיות
           git push origin main
-        env:
-          GH_PAT_CD_REPO: ${{ secrets.GH_PAT_CD_REPO }}
