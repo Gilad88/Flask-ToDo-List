@@ -43,7 +43,6 @@ jobs:
 
       - name: Run Tests
         run: docker-compose exec -T web pytest
-      
       - name: Stop Docker Compose services
         if: always()
         run: docker-compose down
