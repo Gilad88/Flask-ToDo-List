@@ -1,96 +1,59 @@
-name: CI Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Login to Docker Hub
-      uses: docker/login-action@v3
-      with:
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        push: true
-        tags: |
-          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest
-          ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build and Push Docker image
+        uses: docker/build-and-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }},${{ secrets.DOCKER_USERNAME }}/flask-todo-app:latest
 
-    - name: Install Docker Compose # <--- שינוי גדול בשלב זה!
-      run: |
-        DOCKER_COMPOSE_VERSION="v2.24.5" # אתה יכול לשנות גרסה אם צריך
-        sudo curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
-        # וודא שהפקודה זמינה ב-PATH
-        docker-compose version # שימוש בפורמט הישן לבינארי שהורדנו
-        echo "Successfully installed docker-compose version ${DOCKER_COMPOSE_VERSION}"
+      - name: Run Docker Compose
+        run: docker-compose up --build -d
 
-    - name: Ensure docker-compose.yml is in the repository root
-      run: |
-        if [ ! -f "docker-compose.yml" ]; then
-          echo "Error: docker-compose.yml not found in the repository root."
-          exit 1
-        fi
+      - name: Wait for services
+        run: |
+          sleep 10
 
-    - name: Run tests using Docker Compose
-      run: |
-        # חזרנו לשימוש בפורמט הישן (עם מקף) של docker-compose, כי התקנו אותו כך
-        docker-compose down --volumes --remove-orphans || true
-        docker-compose up -d --build --force-recreate
-        sleep 10 # Give services time to start
-        docker-compose exec -T app pytest
-        docker-compose down --volumes --remove-orphans
-      working-directory: . # Ensure this runs from the root where docker-compose.yml is located
+      - name: Run Tests
+        run: docker-compose exec -T web pytest
+      
+      - name: Stop Docker Compose services
+        if: always()
+        run: docker-compose down
 
-    - name: Notify Slack (optional - configure SLACK_WEBHOOK_URL secret)
-      uses: rtCamp/action-slack-notify@v2
-      if: always() # Always run this step, regardless of previous step success/failure
-      env:
-        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
-        SLACK_MESSAGE: "GitHub Action Pipeline for Flask-ToDo-List completed. Status: ${{ job.status }}"
-        SLACK_USERNAME: "GitHub Actions Bot"
-        SLACK_CHANNEL: "#general"
-
-    - name: Update CD Repository (GitOps - requires configuration)
-      if: success() # Only run this if all previous steps succeeded
-      run: |
-        # Configure Git
-        git config --global user.email "actions@github.com"
-        git config --global user.name "GitHub Actions"
-
-        # Clone the CD repository (e.g., where your K8s manifests are)
-        # Replace 'Gilad88/flask-todo-infrastructure.git' with your actual CD repository path
-        git clone https://github.com/Gilad88/flask-todo-infrastructure.git cd_repo_path
-        cd cd_repo_path
-
-        # For simplicity, let's just create a file indicating the new image.
-        # In a real scenario, you would edit an existing K8s manifest (e.g., deployment.yaml)
-        echo "image: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}" > new_image.yaml
-
-        # Commit and push changes
-        git add new_image.yaml # Add your modified K8s manifest file
-        git commit -m "Update Flask To-Do App image to ${{ github.sha }}"
-        # Set the remote URL with the PAT for authentication
-        git remote set-url origin "https://x-access-token:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure.git"
-        # Push changes to the 'main' branch of the CD repository
-        git push origin main
-      env:
-        # This is for the `git push` command, using a GitHub Personal Access Token
-        GH_PAT_CD_REPO: ${{ secrets.GH_PAT_CD_REPO }} # GitHub Secret for PAT
+      - name: Update CD Repository (GitOps)
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone https://Gilad88:${{ secrets.GH_PAT_CD_REPO }}@github.com/Gilad88/flask-todo-infrastructure.git cd_repo_path
+          cd cd_repo_path
+          # שנה את שם האימג' בקובץ ה-deployment.yaml
+          sed -i "s|image: .*/flask-todo-app:.*|image: ${{ secrets.DOCKER_USERNAME }}/flask-todo-app:${{ github.sha }}|" kubernetes/deployment.yaml
+          git add kubernetes/deployment.yaml
+          git commit -m "Update Flask To-Do App image to ${{ github.sha }}" || echo "No changes to commit"
+          git push origin main
+        env:
+          GH_PAT_CD_REPO: ${{ secrets.GH_PAT_CD_REPO }}
